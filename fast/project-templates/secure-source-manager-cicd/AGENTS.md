@@ -23,7 +23,7 @@ These live in `~/dev/tf-playground/fast-config/ludo/data` and are not in this re
 - `2-networking/vpcs/dev/.config.yaml` — the VPC and the private service access peering for the pool, with `ssm.gcp.qix.it.` as peered domain; `2-networking/dns/zones/net-core-0/pvt-ssm.yaml` is the hub zone for the hostnames.
 - `2-security/certificate-authorities/dev-ca-3.yaml` — the CA pool signing the instance certificate. `dev-ca-0` to `dev-ca-2` are burned ids from the region elimination in SSM-CB.md.
 
-The two symlinks in this directory, `dev-build-ssm-0.auto.tfvars.json` and `dev-build-ssm-0-rw-providers.tf`, are the project factory's output for this template's automation seat. They are local wiring and deliberately untracked.
+The three symlinks in this directory are local wiring and deliberately untracked: `dev-build-ssm-0.auto.tfvars.json` and `dev-build-ssm-0-rw-providers.tf` are the project factory's output for this template's automation seat, and `dev-build-ssm-0.auto.tfvars` points at `fast-config/ludo/projects/dev-build-ssm-0.auto.tfvars`, which since 2026-11-04 holds every playground value (projects, regions, VPC, CA pool, hostnames, allowed projects, repositories); the template's `variables.tf` carries no environment defaults.
 
 ## Tooling
 

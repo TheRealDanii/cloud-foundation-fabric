@@ -8,6 +8,10 @@ The design targets a regulated environment. Build workers must have no external 
 
 **This is a work in progress.** The worker pool, the instance, the repositories and the build identity chain are all written and plan; the pool and the instance were applied and probed in September 2026, behind a pair of load balancers since removed from the code, and then torn down when development paused. Nothing is applied now: the plan is to complete the template, then bring everything up in one apply that tests all of it together. The sections below record the design, the prerequisites, and the points still to be resolved.
 
+## Projects
+
+Two project factory files describe the projects this configuration runs in: [`project-ssm.yaml`](./project-ssm.yaml) for the instance project, which also holds the automation seat spanning both, and [`project-build.yaml`](./project-build.yaml) for the build project, which is optional since the instance project can host the pool and the build identities too by leaving `projects_config.build` unset. They carry the APIs, the IAM the automation account needs, the `iam.disableCrossProjectServiceAccountUsage` exception the instance project needs because its repository service accounts create builds in the other project, the certificate requester grant for the service agent, and the Shared VPC and perimeter memberships. Edit the `TODO` lines, or use them as the list of what to create where a project factory is not available.
+
 ## Landing zone configuration
 
 Three pieces of the design sit outside this configuration, because they are properties of the network, of the certificate authority and of the bootstrap stage's service accounts rather than of the project. Where a FAST landing zone is in use they belong in the networking, security and bootstrap stages; where one is not, they have to be created by whoever owns the VPC, the CA pool and the accounts a pipeline impersonates.
@@ -206,3 +210,85 @@ The second boundary is the one the provider cannot fully express today. `google_
 - **Require code owner approval** — without it CODEOWNERS is advisory, and since committing to the default branch is what decides which identities a repository may name, an advisory CODEOWNERS leaves the second boundary resting on branch protection alone.
 
 Until the provider catches up these are operational steps, not configuration, so nothing detects their absence. Check them when a repository is added. Closing the gap upstream is recorded as follow-up work in [TODO.md](TODO.md).
+
+## Example
+
+```hcl
+module "ssm-cicd" {
+  source = "./fabric/fast/project-templates/secure-source-manager-cicd"
+  build_pool_config = {
+    peered_network = "projects/my-dev-net-spoke-0/global/networks/dev-spoke-0"
+  }
+  locations = {
+    build = "europe-west8"
+    ssm   = "europe-west4"
+  }
+  prefix = "test-0"
+  projects_config = {
+    build = {
+      project_id = "my-dev-build-pool-0"
+    }
+    ssm = {
+      number     = 1234567890
+      project_id = "my-dev-build-ssm-0"
+    }
+  }
+  repositories_config = {
+    vpcsc = {
+      description = "FAST 1-vpcsc stage."
+      build_identities = {
+        ro = {
+          impersonate_service_accounts = [
+            "projects/my-iac-0/serviceAccounts/iac-vpcsc-ro@my-iac-0.iam.gserviceaccount.com"
+          ]
+        }
+        rw = {
+          impersonate_service_accounts = [
+            "projects/my-iac-0/serviceAccounts/iac-vpcsc-rw@my-iac-0.iam.gserviceaccount.com"
+          ]
+        }
+      }
+      initial_config = {
+        default_branch = "main"
+      }
+    }
+  }
+  ssm_config = {
+    ca_pool_id = "projects/my-dev-sec-core/locations/europe-west4/caPools/dev-ca-0"
+    custom_host_config = {
+      api      = "api.ssm.example.com"
+      git_http = "git.ssm.example.com"
+      git_ssh  = "ssh.ssm.example.com"
+      html     = "ssm.example.com"
+    }
+    psc_allowed_projects = [
+      "my-dev-net-spoke-0",
+      "my-prod-net-landing-0"
+    ]
+  }
+}
+# tftest modules=5 resources=22
+```
+<!-- BEGIN TFDOC -->
+## Variables
+
+| name | description | type | required | default |
+|---|---|:---:|:---:|:---:|
+| [build_pool_config](variables.tf#L17) | Cloud Build private worker pool. The pool peers with the VPC over private service access, on a range of the given size carved from the VPC's PSA allocation; workers have no external IP. | <code>object&#40;&#123;&#8230;&#125;&#41;</code> | ✓ |  |
+| [locations](variables.tf#L28) | Regions for the build pool and for the instance. The instance region must be one where Secure Source Manager runs, and the CA pool must be in the same region as the instance. | <code>object&#40;&#123;&#8230;&#125;&#41;</code> | ✓ |  |
+| [projects_config](variables.tf#L54) | Instance project, with its number so the Secure Source Manager service agent can be named without an API call, and optional build project for the pool and the build identities; the instance project is used for both when build is null. | <code>object&#40;&#123;&#8230;&#125;&#41;</code> | ✓ |  |
+| [ssm_config](variables.tf#L101) | Instance configuration. The CA pool and psc_allowed_projects are immutable: the pool must be in the instance region, and the allowed projects are the projects that will own consumer endpoints, which with endpoints created by the networking stage are the VPC projects. | <code>object&#40;&#123;&#8230;&#125;&#41;</code> | ✓ |  |
+| [name](variables.tf#L37) | Base name for the instance and the build pool, prefixed with the prefix. | <code>string</code> |  | <code>&#34;ssm-0&#34;</code> |
+| [prefix](variables.tf#L44) | Optional prefix for resource names. | <code>string</code> |  | <code>null</code> |
+| [repositories_config](variables.tf#L68) | Repositories, each with its own repository-level service account and the build identities its pipelines may run as. Build identity keys become service account names as <repository>-<key>; ro and rw are the convention, matching FAST stage accounts. | <code>map&#40;object&#40;&#123;&#8230;&#125;&#41;&#41;</code> |  | <code>&#123;&#125;</code> |
+
+## Outputs
+
+| name | description | sensitive |
+|---|---|:---:|
+| [build_identities](outputs.tf#L17) | Build identity service accounts, keyed <repository>/<identity>; the email is what a triggers file names and what a delegation on an impersonated account refers to. |  |
+| [build_pool_id](outputs.tf#L27) | Cloud Build private worker pool id. |  |
+| [repository_service_accounts](outputs.tf#L32) | Repository-level service account emails, by repository. |  |
+| [service_attachments](outputs.tf#L37) | PSC service attachments of the instance, to be fronted by endpoints in each consumer VPC; the networking stage takes them as service_attachments context entries. They change on every instance rebuild. |  |
+| [ssm_instance](outputs.tf#L45) | Instance id, hostnames and repository ids. |  |
+<!-- END TFDOC -->

@@ -18,7 +18,7 @@ module "ssm-instance" {
   source          = "../../../modules/secure-source-manager-instance"
   project_id      = module.ssm-project.project_id
   location        = var.locations.ssm
-  instance_id     = "${local.prefix}dev-0"
+  instance_id     = "${local.prefix}${var.name}"
   deletion_policy = var.ssm_config.deletion_policy
   private_configs = {
     is_private = true

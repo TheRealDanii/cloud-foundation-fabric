@@ -16,15 +16,15 @@
 
 resource "google_cloudbuild_worker_pool" "default" {
   project  = local.build_project.project_id
-  name     = "${local.prefix}default-0"
+  name     = "${local.prefix}${var.name}"
   location = var.locations.build
   worker_config {
-    disk_size_gb   = 100
-    machine_type   = "e2-standard-2"
+    disk_size_gb   = var.build_pool_config.disk_size_gb
+    machine_type   = var.build_pool_config.machine_type
     no_external_ip = true
   }
   network_config {
-    peered_network          = var.network_config.vpc_self_link
-    peered_network_ip_range = var.network_config.build_psa_range
+    peered_network          = var.build_pool_config.peered_network
+    peered_network_ip_range = var.build_pool_config.psa_range_size
   }
 }

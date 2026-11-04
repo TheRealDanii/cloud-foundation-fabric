@@ -14,54 +14,55 @@
  * limitations under the License.
  */
 
+variable "build_pool_config" {
+  description = "Cloud Build private worker pool. The pool peers with the VPC over private service access, on a range of the given size carved from the VPC's PSA allocation; workers have no external IP."
+  type = object({
+    disk_size_gb   = optional(number, 100)
+    machine_type   = optional(string, "e2-standard-2")
+    peered_network = string
+    psa_range_size = optional(string, "/26")
+  })
+  nullable = false
+}
 
 variable "locations" {
+  description = "Regions for the build pool and for the instance. The instance region must be one where Secure Source Manager runs, and the CA pool must be in the same region as the instance."
   type = object({
     build = string
     ssm   = string
   })
-  default = {
-    build = "europe-west8"
-    ssm   = "europe-west4"
-  }
+  nullable = false
 }
 
-variable "network_config" {
-  description = "VPC the build pool peers with over private service access, and the size of the range carved for it from the PSA allocation."
-  type = object({
-    build_psa_range = optional(string, "/26")
-    vpc_self_link   = string
-  })
-  default = {
-    vpc_self_link = "projects/ldj-dev-net-spoke-0/global/networks/dev-spoke-0"
-  }
+variable "name" {
+  description = "Base name for the instance and the build pool, prefixed with the prefix."
+  type        = string
+  nullable    = false
+  default     = "ssm-0"
 }
 
 variable "prefix" {
-  type    = string
-  default = "test-0"
+  description = "Optional prefix for resource names."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.prefix != ""
+    error_message = "Prefix cannot be empty, please use null instead."
+  }
 }
 
 variable "projects_config" {
+  description = "Instance project, with its number so the Secure Source Manager service agent can be named without an API call, and optional build project for the pool and the build identities; the instance project is used for both when build is null."
   type = object({
     build = optional(object({
       project_id = string
-      number     = optional(number)
     }))
     ssm = object({
       number     = number
       project_id = string
     })
   })
-  default = {
-    build = {
-      project_id = "tf-playground-dev-build-pool-0"
-    }
-    ssm = {
-      number     = 169822929449
-      project_id = "tf-playground-dev-build-ssm-0"
-    }
-  }
+  nullable = false
 }
 
 variable "repositories_config" {
@@ -81,9 +82,9 @@ variable "repositories_config" {
     build_identities = optional(map(object({
       description = optional(string)
       # full service account ids the identity may impersonate, granted as
-      # roles/iam.serviceAccountTokenCreator on each; stage 0 decides which
-      # accounts accept this via a per-account delegation (README, CA pool
-      # and identity section)
+      # roles/iam.serviceAccountTokenCreator on each; the owner of the target
+      # account decides whether it accepts this, via a delegation naming this
+      # configuration's automation account (README, delegation section)
       impersonate_service_accounts = optional(list(string), [])
     })), {})
     initial_config = optional(object({
@@ -94,71 +95,21 @@ variable "repositories_config" {
     }))
   }))
   nullable = false
-  default = {
-    test = {
-      description = "Trigger behaviour tests."
-      build_identities = {
-        ro = {}
-        rw = {}
-      }
-      initial_config = {
-        default_branch = "main"
-        readme         = "default"
-      }
-    }
-    # the FAST VPC-SC stage, the simplest stage to put on a pipeline first;
-    # the stage accounts carry the delegation that admits these grants
-    vpcsc = {
-      description = "FAST 1-vpcsc stage."
-      build_identities = {
-        ro = {
-          impersonate_service_accounts = [
-            "projects/ldj-prod-iac-org-0/serviceAccounts/iac-vpcsc-ro@ldj-prod-iac-org-0.iam.gserviceaccount.com"
-          ]
-        }
-        rw = {
-          impersonate_service_accounts = [
-            "projects/ldj-prod-iac-org-0/serviceAccounts/iac-vpcsc-rw@ldj-prod-iac-org-0.iam.gserviceaccount.com"
-          ]
-        }
-      }
-      initial_config = {
-        default_branch = "main"
-      }
-    }
-  }
+  default  = {}
 }
 
 variable "ssm_config" {
+  description = "Instance configuration. The CA pool and psc_allowed_projects are immutable: the pool must be in the instance region, and the allowed projects are the projects that will own consumer endpoints, which with endpoints created by the networking stage are the VPC projects."
   type = object({
-    ca_pool_id      = string
-    deletion_policy = optional(string, null)
+    ca_pool_id = string
     custom_host_config = object({
       api      = string
       git_http = string
       git_ssh  = string
       html     = string
     })
+    deletion_policy      = optional(string)
     psc_allowed_projects = optional(list(string))
   })
-  default = {
-    ca_pool_id      = "projects/ldj-dev-sec-core/locations/europe-west4/caPools/dev-ca-3"
-    deletion_policy = "DELETE"
-    custom_host_config = {
-      api      = "api.ssm.gcp.qix.it"
-      git_http = "git.ssm.gcp.qix.it"
-      git_ssh  = "ssh.ssm.gcp.qix.it"
-      html     = "ssm.gcp.qix.it"
-    }
-    # these name the projects that will OWN a consumer endpoint, not the host
-    # projects of their networks: an unlisted project sits at PENDING forever
-    # and reports nothing. Endpoints are created by the networking stage in
-    # each VPC's own project, so these are the VPC projects. Immutable, so it
-    # cannot be corrected. dr is out for another reason: another perimeter
-    psc_allowed_projects = [
-      "ldj-dev-net-spoke-0",
-      "ldj-prod-net-landing-0",
-      "ldj-prod-net-spoke-0"
-    ]
-  }
+  nullable = false
 }
