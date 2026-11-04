@@ -2,6 +2,8 @@
 
 A FAST project template bringing up a private Secure Source Manager instance and the Cloud Build machinery that runs pipelines from its repositories. It plans; nothing is applied. The worker pool, the instance and both load balancer chains were live from 2026-09-12 to 2026-09-14, the access path through them was probed from a build worker and from the hub, a throwaway second chain in the prod spoke proved several VPCs can front the same attachment, and then everything was torn down when development paused; the state at `dev-build-ssm-0/default.tfstate` is empty. Development resumed 2026-11-04 with the repositories and the identity chain written in `ssm-repositories.tf`, and the decision is to finish the template before applying, so one apply tests all of it. Work happens on branch `ludo/ssm-cb` in this repository and, for the landing zone side, in `~/dev/tf-playground/fast-config/ludo`.
 
+Session of 2026-11-04 in one line: the template is complete and environment-neutral, the identity chain and the `vpcsc` repository are in, consumer access moved from load balancers in the template to PSC endpoints declared in the networking stage (with `service_attachments` context support added to `net-address` and the stage), and nothing is applied. Start from the handoff paragraph at the top of `TODO.md`'s Next section.
+
 Read the repository's [AGENTS.md](../../../AGENTS.md) for Fabric conventions and [skills/fabric-builder](../../../skills/fabric-builder/SKILL.md) for how to consume modules. Neither is loaded automatically by the skill tool, because `skills/` in the repository root is not a location the harness discovers.
 
 ## The documents, in the order they answer questions
