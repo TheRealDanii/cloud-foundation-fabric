@@ -108,6 +108,26 @@ variable "repositories_config" {
         readme         = "default"
       }
     }
+    # the FAST VPC-SC stage, the simplest stage to put on a pipeline first;
+    # the stage accounts carry the delegation that admits these grants
+    vpcsc = {
+      description = "FAST 1-vpcsc stage."
+      build_identities = {
+        ro = {
+          impersonate_service_accounts = [
+            "projects/ldj-prod-iac-org-0/serviceAccounts/iac-vpcsc-ro@ldj-prod-iac-org-0.iam.gserviceaccount.com"
+          ]
+        }
+        rw = {
+          impersonate_service_accounts = [
+            "projects/ldj-prod-iac-org-0/serviceAccounts/iac-vpcsc-rw@ldj-prod-iac-org-0.iam.gserviceaccount.com"
+          ]
+        }
+      }
+      initial_config = {
+        default_branch = "main"
+      }
+    }
   }
 }
 
