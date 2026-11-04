@@ -34,18 +34,19 @@ output "repository_service_accounts" {
   value       = { for k, v in module.repo-sa : k => v.email }
 }
 
-output "ssm_lb_address" {
-  description = "Shared VIP of the two load balancers, for the ssm.gcp.qix.it A records."
-  value       = module.ssm-lb-ip.internal_addresses[local.ssm_lb_ip].address
+output "service_attachments" {
+  description = "PSC service attachments of the instance, to be fronted by endpoints in each consumer VPC; the networking stage takes them as service_attachments context entries. They change on every instance rebuild."
+  value = {
+    http = module.ssm-instance.http_service_attachment
+    ssh  = module.ssm-instance.ssh_service_attachment
+  }
 }
 
 output "ssm_instance" {
-  description = "Instance id, hostnames, service attachments and repository ids."
+  description = "Instance id, hostnames and repository ids."
   value = {
-    id              = module.ssm-instance.instance_id
-    hosts           = module.ssm-instance.host_config
-    http_attachment = module.ssm-instance.http_service_attachment
-    ssh_attachment  = module.ssm-instance.ssh_service_attachment
-    repository_ids  = module.ssm-instance.repository_ids
+    id             = module.ssm-instance.instance_id
+    hosts          = module.ssm-instance.host_config
+    repository_ids = module.ssm-instance.repository_ids
   }
 }

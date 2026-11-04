@@ -27,14 +27,12 @@ variable "locations" {
 }
 
 variable "network_config" {
+  description = "VPC the build pool peers with over private service access, and the size of the range carved for it from the PSA allocation."
   type = object({
     build_psa_range = optional(string, "/26")
-    subnetwork      = string
     vpc_self_link   = string
   })
   default = {
-    # the load balancer VIP is reserved here and both forwarding rules pin to it
-    subnetwork    = "projects/ldj-dev-net-spoke-0/regions/europe-west4/subnetworks/gce"
     vpc_self_link = "projects/ldj-dev-net-spoke-0/global/networks/dev-spoke-0"
   }
 }
@@ -152,12 +150,11 @@ variable "ssm_config" {
       git_ssh  = "ssh.ssm.gcp.qix.it"
       html     = "ssm.gcp.qix.it"
     }
-    # these name the projects that will OWN a consumer NEG or endpoint, not the
-    # host projects of their networks: an unlisted project sits at PENDING
-    # forever and reports nothing. The intended design is one chain per VPC
-    # project, so these are those projects; the single chain this template
-    # builds lives in the instance project, allowed implicitly. Immutable, so
-    # it cannot be corrected. dr is out for another reason: another perimeter
+    # these name the projects that will OWN a consumer endpoint, not the host
+    # projects of their networks: an unlisted project sits at PENDING forever
+    # and reports nothing. Endpoints are created by the networking stage in
+    # each VPC's own project, so these are the VPC projects. Immutable, so it
+    # cannot be corrected. dr is out for another reason: another perimeter
     psc_allowed_projects = [
       "ldj-dev-net-spoke-0",
       "ldj-prod-net-landing-0",

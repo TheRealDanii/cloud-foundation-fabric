@@ -20,8 +20,7 @@ locals {
     ? var.projects_config.build
     : var.projects_config.ssm
   )
-  prefix    = var.prefix == null ? "" : "${var.prefix}-"
-  ssm_lb_ip = "${local.prefix}dev-0-ssm-lb"
+  prefix = var.prefix == null ? "" : "${var.prefix}-"
 }
 
 module "ssm-project" {
