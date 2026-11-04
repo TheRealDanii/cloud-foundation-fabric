@@ -129,10 +129,12 @@ A PSC NEG is the consumer construct here, and it targets the service attachment 
 
 All of this was probed on 2026-09-14 rather than left as an argument, from a build worker on the peering and from a bastion in the hub. Both resolve the four hostnames to the one address and open both ports on it, across a region boundary and a peering in each case, and the instance answers. The handshake returns the instance's own certificate, signed by our CA and carrying the four custom names in its subject alternative name list, which is what confirms the TLS session reaches the instance. [SSM-CB.md](SSM-CB.md) has the results; `builds/probe-ssm.yaml` is the build.
 
-## Open points
+## Settled points and provider gaps
+
+Two questions this document used to leave open were answered by building the thing; they stay here because the answers are not where a reader would look for them. What is still open is in [TODO.md](TODO.md).
 
 - **Who places the grants on identities this configuration does not own.** `roles/privateca.auditor` comes from here under a delegation, and `roles/iam.serviceAccountTokenCreator` on a FAST stage's Terraform accounts comes from the bootstrap stage, when a stage moves onto the pipeline. See the CA pool section.
-- **What the load balancers need in a Shared VPC service project.** Answered by building it: `roles/compute.networkUser` at host project level for the automation account and for the compute service agent, which is where that role belongs. Subnet-scoped grants are not the narrower form of this — IAM composes, so a subnet binding adds to a project binding rather than restricting it, and limiting a service project to particular subnets is an organisation policy question rather than an IAM one.
+- **What the load balancers need in a Shared VPC service project.** `roles/compute.networkUser` at host project level for the automation account and for the compute service agent, which is where that role belongs. Subnet-scoped grants are not the narrower form of this — IAM composes, so a subnet binding adds to a project binding rather than restricting it, and limiting a service project to particular subnets is an organisation policy question rather than an IAM one.
 - **Provider gaps.** Pin `hashicorp/google` at 7.44.0 or later: `google_secure_source_manager_repository` gained `service_account` there, and that field is what makes a repository-level service account something the configuration enforces rather than something an operator remembers. `google_secure_source_manager_branch_rule` lacks `requiredStatusChecks` and `requireCodeOwnerApproval`, both of which the API has, so the merge gate and the code owner requirement are set in the web interface until the provider carries them. `google_developer_connect_connection` still has no Secure Source Manager block, which rules out the Developer Connect alternative to the network path above.
 
 ## Security note

@@ -21,7 +21,7 @@ These live in `~/dev/tf-playground/fast-config/ludo/data` and are not in this re
 - `2-project-factory/projects/shared/dev-build-ssm-0.yaml` — the instance project. Its header is the best single summary of the design decisions and their reasons.
 - `2-project-factory/projects/shared/dev-build-pool-0.yaml` — the build project, holding the worker pool and the build identities.
 - `2-networking/vpcs/dev/.config.yaml` — the VPC and the private service access peering for the pool, with `ssm.gcp.qix.it.` as peered domain; `2-networking/dns/zones/net-core-0/pvt-ssm.yaml` is the hub zone for the hostnames.
-- `2-security/certificate-authorities/dev-ca-0.yaml` — the CA pool signing the instance certificate.
+- `2-security/certificate-authorities/dev-ca-3.yaml` — the CA pool signing the instance certificate. `dev-ca-0` to `dev-ca-2` are burned ids from the region elimination in SSM-CB.md.
 
 The two symlinks in this directory, `dev-build-ssm-0.auto.tfvars.json` and `dev-build-ssm-0-rw-providers.tf`, are the project factory's output for this template's automation seat. They are local wiring and deliberately untracked.
 
