@@ -40,4 +40,4 @@ options:
   logging: CLOUD_LOGGING_ONLY
   pool:
     name: projects/tf-playground-dev-build-pool-0/locations/europe-west8/workerPools/test-0-default-0
-serviceAccount: projects/tf-playground-dev-build-pool-0/serviceAccounts/test-0-build-test-0@tf-playground-dev-build-pool-0.iam.gserviceaccount.com
+serviceAccount: projects/tf-playground-dev-build-pool-0/serviceAccounts/test-0-test-ro@tf-playground-dev-build-pool-0.iam.gserviceaccount.com

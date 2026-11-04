@@ -41,16 +41,3 @@ module "ssm-project" {
     grant_default_roles   = false
   }
 }
-
-module "build-sa-test" {
-  source     = "../../../modules/iam-service-account"
-  project_id = local.build_project.project_id
-  name       = "build-test-0"
-  prefix     = var.prefix
-  iam_project_roles = {
-    (local.build_project.project_id) = [
-      "roles/logging.logWriter",
-      "roles/cloudbuild.workerPoolUser",
-    ]
-  }
-}

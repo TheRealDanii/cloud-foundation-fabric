@@ -27,5 +27,26 @@ module "ssm-instance" {
     psc_allowed_projects = var.ssm_config.psc_allowed_projects
     custom_host_config   = var.ssm_config.custom_host_config
   }
-  repositories = {}
+  repositories = {
+    for k, v in var.repositories_config : k => {
+      description     = v.description
+      branch_rules    = v.branch_rules
+      initial_config  = v.initial_config
+      service_account = module.repo-sa[k].email
+      # build identities read the repository, on the repository and never on
+      # the project, which is what keeps repositories isolated
+      iam = {
+        "roles/securesourcemanager.repoReader" = [
+          for ik, iv in v.build_identities :
+          module.build-sa["${k}/${ik}"].iam_email
+        ]
+      }
+    }
+  }
+  # every build identity needs instanceAccessor on the instance itself
+  iam = {
+    "roles/securesourcemanager.instanceAccessor" = [
+      for k, v in module.build-sa : v.iam_email
+    ]
+  }
 }

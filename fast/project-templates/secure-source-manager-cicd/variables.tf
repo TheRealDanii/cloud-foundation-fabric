@@ -66,6 +66,51 @@ variable "projects_config" {
   }
 }
 
+variable "repositories_config" {
+  description = "Repositories, each with its own repository-level service account and the build identities its pipelines may run as. Build identity keys become service account names as <repository>-<key>; ro and rw are the convention, matching FAST stage accounts."
+  type = map(object({
+    description = optional(string)
+    branch_rules = optional(map(object({
+      include_pattern           = string
+      allow_stale_reviews       = optional(bool)
+      disabled                  = optional(bool, false)
+      minimum_approvals_count   = optional(number)
+      minimum_reviews_count     = optional(number)
+      require_comments_resolved = optional(bool)
+      require_linear_history    = optional(bool)
+      require_pull_request      = optional(bool)
+    })), {})
+    build_identities = optional(map(object({
+      description = optional(string)
+      # full service account ids the identity may impersonate, granted as
+      # roles/iam.serviceAccountTokenCreator on each; stage 0 decides which
+      # accounts accept this via a per-account delegation (README, CA pool
+      # and identity section)
+      impersonate_service_accounts = optional(list(string), [])
+    })), {})
+    initial_config = optional(object({
+      default_branch = optional(string)
+      gitignores     = optional(list(string))
+      license        = optional(string)
+      readme         = optional(string)
+    }))
+  }))
+  nullable = false
+  default = {
+    test = {
+      description = "Trigger behaviour tests."
+      build_identities = {
+        ro = {}
+        rw = {}
+      }
+      initial_config = {
+        default_branch = "main"
+        readme         = "default"
+      }
+    }
+  }
+}
+
 variable "ssm_config" {
   type = object({
     ca_pool_id      = string

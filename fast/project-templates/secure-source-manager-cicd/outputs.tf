@@ -14,8 +14,24 @@
  * limitations under the License.
  */
 
+output "build_identities" {
+  description = "Build identity service accounts, keyed <repository>/<identity>; the email is what a triggers file names and what a delegation on an impersonated account refers to."
+  value = {
+    for k, v in module.build-sa : k => {
+      email = v.email
+      id    = v.id
+    }
+  }
+}
+
 output "build_pool_id" {
-  value = google_cloudbuild_worker_pool.default.id
+  description = "Cloud Build private worker pool id."
+  value       = google_cloudbuild_worker_pool.default.id
+}
+
+output "repository_service_accounts" {
+  description = "Repository-level service account emails, by repository."
+  value       = { for k, v in module.repo-sa : k => v.email }
 }
 
 output "ssm_lb_address" {
@@ -23,8 +39,8 @@ output "ssm_lb_address" {
   value       = module.ssm-lb-ip.internal_addresses[local.ssm_lb_ip].address
 }
 
-
 output "ssm_instance" {
+  description = "Instance id, hostnames, service attachments and repository ids."
   value = {
     id              = module.ssm-instance.instance_id
     hosts           = module.ssm-instance.host_config

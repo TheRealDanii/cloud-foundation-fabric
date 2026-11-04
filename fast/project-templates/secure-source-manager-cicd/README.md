@@ -6,11 +6,11 @@ Secure Source Manager reads a `.cloudbuild/triggers.yaml` file from each reposit
 
 The design targets a regulated environment. Build workers must have no external IP address. Build traffic must be attributable to the customer's VPC Service Controls perimeter: an API call made from a build step faces the same perimeter as a call made from anywhere else in the environment, and appears in the same audit logs. Those two requirements are why the pool is private and peered to the VPC, and the first apply has to demonstrate them rather than assume them — see the worker pool section.
 
-**This is a work in progress.** The worker pool, the instance and the two load balancers are implemented and applied; the repositories and the build identity chain are not. The sections below record the design, the prerequisites, and the points still to be resolved.
+**This is a work in progress.** The worker pool, the instance, the two load balancers, the repositories and the build identity chain are all written and plan; the first three were applied and probed in September 2026 and then torn down when development paused. Nothing is applied now: the plan is to complete the template, then bring everything up in one apply that tests all of it together. The sections below record the design, the prerequisites, and the points still to be resolved.
 
 ## Landing zone configuration
 
-Three pieces of the design sit outside this configuration, because they are properties of the network and of the certificate authority rather than of the project. Where a FAST landing zone is in use they belong in the networking and security stages; where one is not, they have to be created by whoever owns the VPC and the CA pool.
+Three pieces of the design sit outside this configuration, because they are properties of the network, of the certificate authority and of the bootstrap stage's service accounts rather than of the project. Where a FAST landing zone is in use they belong in the networking, security and bootstrap stages; where one is not, they have to be created by whoever owns the VPC, the CA pool and the accounts a pipeline impersonates.
 
 ### The CA pool and the certificate requester grant
 
@@ -51,7 +51,42 @@ Include `roles/privateca.auditor` in the same condition. The build identities ne
 
 The auditor grant exists for one call. The instance's certificate is signed by our own CA, so nothing on a worker trusts it; before it can clone, a build runs `gcloud privateca pools get-ca-certs`, writes the chain and points git at it. A probe on 2026-09-14 confirmed both halves of that: a worker with no such grant is denied `privateca.caPools.get` and cannot obtain the chain, and a client that does hold the chain verifies the instance's certificate cleanly where a default trust store fails it. Auditor is read-only across the CA project's resources, which is wider than that one fetch, and it is granted per build identity on a project this configuration does not own. Two things would be better. A custom role holding only the permission `get-ca-certs` needs would keep the shape and narrow the grant. Publishing the bundle to a bucket, ideally a managed folder holding just this chain, would remove the grant and the delegation behind it entirely, since the chain is a public artifact and reading it needs nothing on the CA. Neither is done here; the second is on the TODO list as stage work.
 
-The build identities take `roles/privateca.auditor` from this configuration, through `iam_project_roles` on `iam-service-account`, and the delegation on the CA pool's project names this configuration's service account rather than the factory's. The factory cannot place it: the identities do not exist until this configuration creates them. One more grant crosses an ownership line: `roles/iam.serviceAccountTokenCreator` on the Terraform service accounts the build identities impersonate. For application pipelines those accounts sit next to the application and the grant is placed here through `iam_sa_roles`. For FAST stages they belong to the bootstrap stage, and the binding goes there: the build identities are added as static context entries and named from the automation project's IAM. Stages are few and do not grow, and each moves onto the pipeline only after it has been applied by hand and shown to work, so this is a one-line change per stage rather than a delegation.
+The build identities take `roles/privateca.auditor` from this configuration, through `iam_project_roles` on `iam-service-account`, and the delegation on the CA pool's project names this configuration's service account rather than the factory's. The factory cannot place it: the identities do not exist until this configuration creates them.
+
+### The delegation that lets build identities impersonate stage accounts
+
+One more grant crosses an ownership line, and it is the one that makes a pipeline useful: `roles/iam.serviceAccountTokenCreator` on the Terraform service accounts a build identity impersonates. For application pipelines those accounts sit next to the application and nothing special is needed. For FAST stages they belong to the bootstrap stage, in the `iac-0` project, and this configuration's automation account has no right to set IAM on them.
+
+Both ends of that edge are known here and nowhere else — the build identities are created here, the stage accounts are named in `repositories_config` — so this is where the grant is placed, and the bootstrap stage decides which of its accounts accept it. That decision is a delegation on each account rather than on the project: a conditioned binding on the service account resource, allowing this configuration's automation account to modify only `roles/iam.serviceAccountTokenCreator` on that one account. The set of stage accounts a build can ever impersonate is then the list of accounts carrying the binding, declared by their owner next to their definition, and an `impersonate_service_accounts` entry naming any other account fails the apply with a permission error, which is the right failure.
+
+The role in that binding has to be a custom one. The only predefined role carrying `iam.serviceAccounts.setIamPolicy` is `roles/iam.serviceAccountAdmin`, which also carries delete, disable and key management, and the `modifiedGrantsByRole` condition does not restrain those: the attribute is only present on `setIamPolicy` requests, so on anything else `getAttribute(..., [])` yields an empty list and `hasOnly` passes. This is why Google's delegation examples pair the condition with `projectIamAdmin`, a role holding nothing but policy permissions. The equivalent for service accounts is an organization custom role with `iam.serviceAccounts.get`, `iam.serviceAccounts.getIamPolicy` and `iam.serviceAccounts.setIamPolicy`. In the bootstrap stage data that is one custom role file plus, per impersonable account, one binding:
+
+```yaml
+# organization/custom-roles/service_account_iam_admin.yaml
+name: serviceAccountIamAdmin
+includedPermissions:
+  - iam.serviceAccounts.get
+  - iam.serviceAccounts.getIamPolicy
+  - iam.serviceAccounts.setIamPolicy
+```
+
+```yaml
+# projects/core/iac-0.yaml, on each stage account builds may impersonate
+service_accounts:
+  iac-networking-ro:
+    display_name: IaC service account for networking (read-only).
+    iam_bindings_additive:
+      ssm-build-delegation:
+        role: $custom_roles:service_account_iam_admin
+        member: $iam_principals:ssm-rw
+        condition:
+          title: SSM build identities delegation.
+          expression: |
+            api.getAttribute('iam.googleapis.com/modifiedGrantsByRole', [])
+            .hasOnly(['roles/iam.serviceAccountTokenCreator'])
+```
+
+`ssm-rw` is a static `context.iam_principals` entry in the bootstrap stage's `defaults.yaml`, holding the automation account's email, since that account is created by the project factory and the bootstrap stage does not otherwise know it. The ordering is the natural one: the factory creates the account, the bootstrap stage is reapplied with the bindings, and this configuration can then place the grant.
 
 ### The private DNS zone for the instance hostnames
 
@@ -133,7 +168,7 @@ All of this was probed on 2026-09-14 rather than left as an argument, from a bui
 
 Two questions this document used to leave open were answered by building the thing; they stay here because the answers are not where a reader would look for them. What is still open is in [TODO.md](TODO.md).
 
-- **Who places the grants on identities this configuration does not own.** `roles/privateca.auditor` comes from here under a delegation, and `roles/iam.serviceAccountTokenCreator` on a FAST stage's Terraform accounts comes from the bootstrap stage, when a stage moves onto the pipeline. See the CA pool section.
+- **Who places the grants on identities this configuration does not own.** `roles/privateca.auditor` comes from here under a delegation on the CA project, and `roles/iam.serviceAccountTokenCreator` on a stage's Terraform accounts also comes from here, under a per-account delegation declared in the bootstrap stage. See the CA pool and delegation sections.
 - **What the load balancers need in a Shared VPC service project.** `roles/compute.networkUser` at host project level for the automation account and for the compute service agent, which is where that role belongs. Subnet-scoped grants are not the narrower form of this — IAM composes, so a subnet binding adds to a project binding rather than restricting it, and limiting a service project to particular subnets is an organisation policy question rather than an IAM one.
 - **Provider gaps.** Pin `hashicorp/google` at 7.44.0 or later: `google_secure_source_manager_repository` gained `service_account` there, and that field is what makes a repository-level service account something the configuration enforces rather than something an operator remembers. `google_secure_source_manager_branch_rule` lacks `requiredStatusChecks` and `requireCodeOwnerApproval`, both of which the API has, so the merge gate and the code owner requirement are set in the web interface until the provider carries them. `google_developer_connect_connection` still has no Secure Source Manager block, which rules out the Developer Connect alternative to the network path above.
 
