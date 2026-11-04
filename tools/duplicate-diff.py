@@ -121,6 +121,14 @@ duplicates = [
         "modules/net-vpc-factory/schemas/vpc-factory.schema.json",
     ],
     [
+        "fast/stages/2-networking/schemas/security-policy.schema.json",
+        "fast/stages/2-security/schemas/security-policy.schema.json",
+    ],
+    [
+        "fast/stages/2-networking/factory-security-policies.tf",
+        "fast/stages/2-security/factory-security-policies.tf",
+    ],
+    [
         "fast/stages/0-org-setup/schemas/tags.schema.json",
         "modules/project/schemas/tags.schema.json",
         "modules/organization/schemas/tags.schema.json",
@@ -131,9 +139,10 @@ duplicates = [
         "modules/cloud-function-v2/bundle.tf",
     ],
     [
+        # cloud-run-v2 forked this into identity.tf, as it also supports
+        # Cloud Run managed workload and agent identities
         "modules/cloud-function-v1/serviceaccount.tf",
         "modules/cloud-function-v2/serviceaccount.tf",
-        "modules/cloud-run-v2/serviceaccount.tf",
     ],
     [
         "modules/cloud-function-v1/variables-serviceaccount.tf",
@@ -149,6 +158,14 @@ duplicates = [
         "modules/cloud-function-v1/vpcconnector.tf",
         "modules/cloud-function-v2/vpcconnector.tf",
         "modules/cloud-run-v2/vpcconnector.tf",
+    ],
+    # route policies
+    [
+        "modules/ncc-spoke-ra/route-policies.tf",
+        "modules/net-ipsec-over-interconnect/route-policies.tf",
+        "modules/net-vlan-attachment/route-policies.tf",
+        "modules/net-vpn-dynamic/route-policies.tf",
+        "modules/net-vpn-ha/route-policies.tf",
     ],
 ]
 

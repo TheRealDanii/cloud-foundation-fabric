@@ -22,6 +22,9 @@ locals {
       for vpc_key, vpc in module.vpc-factory.vpcs :
       vpc_key => vpc.network_attachment_ids
     }
+    networking_security_policies = {
+      for k, v in module.security-policies : k => v.id
+    }
     subnet_ips = {
       for vpc_key, vpc in module.vpc-factory.vpcs : vpc_key => vpc.subnet_ips
     }
@@ -87,6 +90,11 @@ output "host_project_numbers" {
 output "network_attachment_ids" {
   description = "PSC network attachment ids."
   value       = local.tfvars.network_attachment_ids
+}
+
+output "security_policies" {
+  description = "Hierarchical security policy ids."
+  value       = local.tfvars.networking_security_policies
 }
 
 output "subnet_ips" {

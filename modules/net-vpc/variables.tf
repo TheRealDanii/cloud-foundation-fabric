@@ -113,6 +113,16 @@ variable "factories_config" {
   default = {}
 }
 
+variable "firewall_policy_associations" {
+  description = "Network firewall policies to associate with this VPC, keyed by region or by `global` for the global policy. The association name defaults to the VPC name followed by the key. Manage each association from one side only, either here or via the `attachments` variable of the policy module, never both."
+  type = map(object({
+    name      = optional(string)
+    policy_id = string
+  }))
+  default  = {}
+  nullable = false
+}
+
 variable "firewall_policy_enforcement_order" {
   description = "Order that Firewall Rules and Firewall Policies are evaluated. Can be either 'BEFORE_CLASSIC_FIREWALL' or 'AFTER_CLASSIC_FIREWALL'."
   type        = string
@@ -461,7 +471,10 @@ variable "subnets" {
       for s in var.subnets :
       (
         length([
-          for field in [s.ip_cidr_range, s.reserved_internal_range, s.ip_collection] :
+          for field in [
+            try(coalesce(s.ip_cidr_range, s.reserved_internal_range), null),
+            s.ip_collection
+          ] :
           field if field != null
         ]) == 1
         ) || (
@@ -471,17 +484,17 @@ variable "subnets" {
         ]) == 0 && try(s.ipv6.ipv6_only, false) == true
       )
     ])
-    error_message = "Each subnet must specify exactly one of ip_cidr_range, reserved_internal_range, or ip_collection, or all three can be null for IPv6-only subnets (ipv6.ipv6_only = true)."
+    error_message = "Each subnet must specify ip_cidr_range and/or reserved_internal_range, or ip_collection, or all three can be null for IPv6-only subnets (ipv6.ipv6_only = true)."
   }
   validation {
     condition = alltrue([
       for s in var.subnets :
       s.secondary_ip_ranges == null || alltrue([
         for range_name, range_config in coalesce(s.secondary_ip_ranges, {}) :
-        (range_config.ip_cidr_range != null) != (range_config.reserved_internal_range != null)
+        range_config.ip_cidr_range != null || range_config.reserved_internal_range != null
       ])
     ])
-    error_message = "Each secondary IP range must specify either ip_cidr_range or reserved_internal_range, but not both."
+    error_message = "Each secondary IP range must specify ip_cidr_range and/or reserved_internal_range."
   }
 }
 

@@ -24,6 +24,17 @@ locals {
   cluster_region_config = (
     mongodbatlas_advanced_cluster.default.replication_specs[0].region_configs[0]
   )
+  database_user_passwords = {
+    for k, v in var.database_users : k => (
+      v.password == null
+      ? null
+      : (
+        v.password.path == null
+        ? v.password.value
+        : file(pathexpand(v.password.path))
+      )
+    )
+  }
 }
 
 module "addresses" {
@@ -88,4 +99,55 @@ resource "mongodbatlas_privatelink_endpoint_service" "default" {
   endpoint_service_id         = module.addresses.psc[local.psc_endpoint_key].forwarding_rule.name
   private_endpoint_ip_address = module.addresses.psc[local.psc_endpoint_key].address.address
   gcp_project_id              = var.project_id
+}
+
+resource "mongodbatlas_database_user" "database_user" {
+  for_each = var.database_users
+  username = each.key
+  password = (
+    try(each.value.password.wo_version, null) != null
+    ? null
+    : local.database_user_passwords[each.key]
+  )
+  password_wo = (
+    try(each.value.password.wo_version, null) == null
+    ? null
+    : local.database_user_passwords[each.key]
+  )
+  password_wo_version = try(each.value.password.wo_version, null)
+  project_id          = mongodbatlas_project.default.id
+  auth_database_name  = each.value.auth_database_name
+  aws_iam_type        = each.value.aws_iam_type
+  description         = each.value.description
+  ldap_auth_type      = each.value.ldap_auth_type
+  oidc_auth_type      = each.value.oidc_auth_type
+  x509_type           = each.value.x509_type
+
+  dynamic "labels" {
+    for_each = each.value.labels
+
+    content {
+      key   = labels.key
+      value = labels.value
+    }
+  }
+
+  dynamic "roles" {
+    for_each = each.value.roles
+
+    content {
+      role_name       = roles.value.role_name
+      database_name   = roles.value.database_name
+      collection_name = roles.value.collection_name
+    }
+  }
+
+  dynamic "scopes" {
+    for_each = each.value.scopes
+
+    content {
+      name = scopes.key
+      type = scopes.value.type
+    }
+  }
 }

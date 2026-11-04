@@ -15,7 +15,7 @@ This Terraform can of course be deployed using any pre-existing project. In that
 
 ## Variable Configuration
 
-Configuration is mostly done via the `atlas_config` and `vpc_config` variables. Note that:
+Configuration is mostly done via the `atlas_config`, `database_users`, and `vpc_config` variables. Note that:
 
 - VPC configuration can be set to reference a Shared VPC Host network like shown below, or an in-project network if that is preferred
 - the PSC CIDR block is used to allocate the required 50 endpoint addresses in the VPC, so it needs to be large enough to accommodate them
@@ -36,6 +36,28 @@ atlas_config = {
     private_key = "xxxxx-xxxx-xxxx-xxxx-xxxxxxxx"
   }
 }
+database_users = {
+  my-db-user = {
+    password = {
+      value      = "s3cr3t-p4ssw0rd"
+      wo_version = 1
+    }
+    labels = {
+      environment = "test"
+    }
+    roles = {
+      app = {
+        database_name = "app"
+        role_name     = "readWrite"
+      }
+    }
+    scopes = {
+      test-0 = {
+        type = "CLUSTER"
+      }
+    }
+  }
+}
 project_id = "my-prod-shared-mongodb-0"
 vpc_config = {
   network_name   = "dev-spoke-0"
@@ -44,15 +66,26 @@ vpc_config = {
 }
 # tftest skip
 ```
+
+## Secret values
+
+`database_users.*.password` is an object that follows the [shape used for secrets across modules](../../../adrs/modules/20261029-write-only-secrets.md):
+
+- `value` is the secret itself
+- `path` is the path to a file containing the secret, read via `file(pathexpand(path))` and relative to the root module; the file must exist at every plan
+- `wo_version` switches to the provider's write-only attribute, so that the secret is never stored in state; bump the number whenever the secret changes and needs to be sent again
+
+Only one of `value` and `path` can be set. Without `wo_version` the secret is stored in state, and that form should only be used when this is acceptable. With `wo_version` set, both `value` and `path` can be null once the secret has been applied, since the provider leaves the existing write-only value untouched until the version changes: this allows passing `value = try(file("secret.txt"), null)` and removing the file after the first apply.
 <!-- BEGIN TFDOC -->
 ## Variables
 
 | name | description | type | required | default |
 |---|---|:---:|:---:|:---:|
 | [atlas_config](variables.tf#L17) | MongoDB Atlas configuration. | <code>object&#40;&#123;&#8230;&#125;&#41;</code> | ✓ |  |
-| [project_id](variables.tf#L40) | Project id where the registries will be created. | <code>string</code> | ✓ |  |
-| [vpc_config](variables.tf#L45) | VPC configuration. | <code>object&#40;&#123;&#8230;&#125;&#41;</code> | ✓ |  |
-| [name](variables.tf#L33) | Prefix used for all resource names. | <code>string</code> |  | <code>&#34;mongodb&#34;</code> |
+| [project_id](variables.tf#L78) | Project id where the registries will be created. | <code>string</code> | ✓ |  |
+| [vpc_config](variables.tf#L83) | VPC configuration. | <code>object&#40;&#123;&#8230;&#125;&#41;</code> | ✓ |  |
+| [database_users](variables.tf#L33) | MongoDB Atlas database users configuration. The map key is used as the username. | <code>map&#40;object&#40;&#123;&#8230;&#125;&#41;&#41;</code> |  | <code>&#123;&#125;</code> |
+| [name](variables.tf#L71) | Prefix used for all resource names. | <code>string</code> |  | <code>&#34;mongodb&#34;</code> |
 
 ## Outputs
 
@@ -79,6 +112,28 @@ module "test" {
       private_key = "xxxxx-xxxx-xxxx-xxxx-xxxxxxxx"
     }
   }
+  database_users = {
+    my-db-user = {
+      password = {
+        value      = "s3cr3t-p4ssw0rd"
+        wo_version = 1
+      }
+      labels = {
+        environment = "test"
+      }
+      roles = {
+        app = {
+          database_name = "app"
+          role_name     = "readWrite"
+        }
+      }
+      scopes = {
+        test-0 = {
+          type = "CLUSTER"
+        }
+      }
+    }
+  }
   project_id = "my-prod-shared-mongodb-0"
   vpc_config = {
     network_name   = "dev-spoke-0"
@@ -86,5 +141,5 @@ module "test" {
     psc_cidr_block = "10.8.11.192/26"
   }
 }
-# tftest modules=2 resources=6
+# tftest modules=2 resources=7
 ```

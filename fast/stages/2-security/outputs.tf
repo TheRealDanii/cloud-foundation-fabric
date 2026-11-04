@@ -15,6 +15,16 @@
  */
 
 locals {
+  _o_cas_modules = merge(module.cas, module.cas-subordinate)
+  _o_cas = flatten([
+    for k, v in local._o_cas_modules : [
+      for name, id in v.ca_ids : {
+        chain = v.ca_chains[name]
+        id    = id
+        key   = "${k}-${name}"
+      }
+    ]
+  ])
   _o_kms_keys = flatten([
     for k, v in module.kms : [
       for name, id in v.key_ids : {
@@ -24,15 +34,20 @@ locals {
     ]
   ])
   tfvars = {
+    ca_chains = {
+      for k in local._o_cas : k.key => k.chain
+    }
+    ca_ids = {
+      for k in local._o_cas : k.key => k.id
+    }
     ca_pools = {
-      for k, v in module.cas : k => {
-        ca_ids   = v.ca_ids
-        id       = v.ca_pool_id
-        location = v.ca_pool.location
-      }
+      for k, v in local._o_cas_modules : k => v.ca_pool_id
     }
     kms_keys = {
       for k in local._o_kms_keys : k.key => k.id
+    }
+    security_security_policies = {
+      for k, v in module.security-policies : k => v.id
     }
   }
 }
@@ -46,6 +61,20 @@ resource "google_storage_bucket_object" "version" {
   name           = "versions/${local.defaults.stage_name}-version.txt"
   source         = "fast_version.txt"
   source_md5hash = filemd5("fast_version.txt")
+}
+
+resource "local_file" "ca_chains" {
+  for_each        = local.output_files.local_path == null ? {} : local.tfvars.ca_chains
+  file_permission = "0644"
+  filename        = "${pathexpand(local.output_files.local_path)}/ca-chains/${local.defaults.stage_name}/${each.key}.pem"
+  content         = each.value
+}
+
+resource "google_storage_bucket_object" "ca_chains" {
+  for_each = local.output_files.storage_bucket == null ? {} : local.tfvars.ca_chains
+  bucket   = local.output_files.storage_bucket
+  name     = "ca-chains/${local.defaults.stage_name}/${each.key}.pem"
+  content  = each.value
 }
 
 resource "local_file" "tfvars" {
@@ -63,14 +92,24 @@ resource "google_storage_bucket_object" "tfvars" {
   source_md5hash = md5(jsonencode(local.tfvars))
 }
 
+output "ca_ids" {
+  description = "Certificate Authority Service CA IDs."
+  value       = local.tfvars.ca_ids
+}
+
 output "ca_pools" {
-  description = "Certificate Authority Service pools and CAs."
+  description = "Certificate Authority Service pool IDs."
   value       = local.tfvars.ca_pools
 }
 
 output "kms_keys_ids" {
   description = "KMS keys IDs."
   value       = local.tfvars.kms_keys
+}
+
+output "security_policies" {
+  description = "Hierarchical security policy ids."
+  value       = local.tfvars.security_security_policies
 }
 
 output "tfvars" {

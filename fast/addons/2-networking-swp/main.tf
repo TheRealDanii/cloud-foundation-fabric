@@ -16,13 +16,27 @@
 
 locals {
   aliased_project_id = lookup(
-    var.host_project_ids, var.project_id, var.project_id
+    local.ctx_lookup.project_ids, var.project_id, var.project_id
   )
+  ctx = merge(var.context, {
+    ca_ids      = merge(var.context.ca_ids, var.ca_ids)
+    ca_pools    = merge(var.context.ca_pools, var.ca_pools)
+    locations   = merge(var.context.locations, var.regions)
+    project_ids = merge(var.context.project_ids, var.host_project_ids)
+    vpcs        = merge(var.context.vpcs, var.vpc_self_links)
+  })
+  ctx_lookup = {
+    for k, v in local.ctx : k => merge(
+      v,
+      { for kk, vv in v : "${local.ctx_p}${k}:${kk}" => vv }
+    ) if k != "condition_vars"
+  }
+  ctx_p = "$"
   project_id = try(
-    module.project[0].project_id, var.project_id
+    module.project[0].project_id, local.aliased_project_id
   )
   regions = {
-    for k, v in var.locations : k => lookup(var.regions, v, v)
+    for k, v in var.locations : k => lookup(local.ctx_lookup.locations, v, v)
   }
   swp_configs = flatten([
     for r_k, r_v in local.regions : [
@@ -40,12 +54,10 @@ module "project" {
   count         = var._fast_debug.skip_datasources == true ? 0 : 1
   name          = local.aliased_project_id
   project_reuse = {}
-  service_agents_config = {
-    services_enabled = [
-      "networksecurity.googleapis.com"
-    ]
-  }
   services = var.enable_services != true ? [] : [
+    "certificatemanager.googleapis.com",
+    "networksecurity.googleapis.com",
+    "networkservices.googleapis.com",
     "privateca.googleapis.com"
   ]
 }
@@ -57,7 +69,7 @@ module "swp" {
   region     = each.value.region
   name       = each.key
   network = lookup(
-    var.vpc_self_links,
+    local.ctx_lookup.vpcs,
     each.value.network_id,
     each.value.network_id
   )
@@ -88,7 +100,9 @@ module "swp" {
       each.value.tls_inspection_policy_id != null
       ? each.value.tls_inspection_policy_id
       : try(
-        google_network_security_tls_inspection_policy.default[each.value.region].id,
+        google_network_security_tls_inspection_policy.default[
+          each.value.region_shortname
+        ].id,
         null
       )
     )

@@ -16,21 +16,45 @@
 
 # tfdoc:file:description TLS inspection policies and supporting resources.
 
+resource "google_project_service_identity" "nsec" {
+  provider = google-beta
+  count = (
+    var._fast_debug.skip_datasources == true ||
+    var.certificate_authority == null ||
+    var.enable_services == true
+  ) ? 0 : 1
+  project = local.project_id
+  service = "networksecurity.googleapis.com"
+}
+
 module "cas" {
   source     = "../../../modules/certificate-authority-service"
   for_each   = var.certificate_authority == null ? {} : local.regions
   project_id = local.project_id
   location   = each.value
   ca_configs = var.certificate_authority.ca_configs
-  ca_pool_config = (
-    var.certificate_authority.ca_pool_config != null
-    ? var.certificate_authority.ca_pool_config
-    : {
-      create_pool = {
-        name = "${var.name}-${each.key}"
+  ca_pool_config = {
+    create_pool = (
+      try(var.certificate_authority.ca_pool_config.use_pool.id, null) != null
+      ? null
+      : {
+        enterprise_tier = try(
+          var.certificate_authority.ca_pool_config.create_pool.enterprise_tier,
+          false
+        )
+        name = coalesce(
+          try(var.certificate_authority.ca_pool_config.create_pool.name, null),
+          "${var.name}-${each.key}"
+        )
+        publishing_options = try(
+          var.certificate_authority.ca_pool_config.create_pool.publishing_options,
+          null
+        )
       }
-    }
-  )
+    )
+    use_pool = try(var.certificate_authority.ca_pool_config.use_pool, null)
+  }
+  context           = local.ctx
   iam               = var.certificate_authority.iam
   iam_by_principals = var.certificate_authority.iam_by_principals
   iam_bindings      = var.certificate_authority.iam_bindings
@@ -38,8 +62,12 @@ module "cas" {
     var.certificate_authority.iam_bindings_additive,
     var._fast_debug.skip_datasources == true ? {} : {
       nsec_certificate_manager = {
-        member = module.project[0].service_agents["networksecurity"].iam_email
-        role   = "roles/privateca.certificateManager"
+        member = (
+          var.enable_services == true
+          ? module.project[0].service_agents["networksecurity"].iam_email
+          : google_project_service_identity.nsec[0].member
+        )
+        role = "roles/privateca.certificateManager"
       }
     }
   )
@@ -54,9 +82,14 @@ resource "google_network_security_tls_inspection_policy" "default" {
   ca_pool = (
     var.tls_inspection_policy.ca_pool_id == null
     ? module.cas[each.key].ca_pool_id
-    : var.tls_inspection_policy.ca_pool_id
+    : lookup(
+      local.ctx_lookup.ca_pools,
+      var.tls_inspection_policy.ca_pool_id,
+      var.tls_inspection_policy.ca_pool_id
+    )
   )
   custom_tls_features = try(var.tls_inspection_policy.tls.custom_features, null)
   tls_feature_profile = try(var.tls_inspection_policy.tls.feature_profile, null)
   min_tls_version     = try(var.tls_inspection_policy.tls.min_version, null)
+  depends_on          = [module.cas]
 }
